@@ -768,6 +768,18 @@ td.far { background: var(--far-bg); color: var(--far-ink); font-weight: 700; }
 .lineup { font-size: .88rem; color: var(--ink); grid-column: 1 / -1; }
 .lineup a { color: var(--person); }
 .ranking .lineup { margin: 0 0 .5rem; }
+.details { margin: .25rem 0 .75rem; }
+.details dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: .15rem .75rem; }
+.details dt { color: var(--muted); font-size: .82rem; }
+.details dd { margin: 0; font-size: .92rem; overflow-wrap: anywhere; }
+.details dd a { color: var(--person); }
+  .seg { display: block; }
+  .yr { display: inline-block; font-size: .7rem; font-weight: 700; padding: 0 .35rem; border-radius: 999px; margin-right: .35rem; vertical-align: .08em; white-space: nowrap; }
+  .yr.cur { background: var(--near-bg); color: var(--near-ink); }
+  .yr.old { background: var(--hi); color: var(--fest-ink); }
+  .yr.unk { background: var(--far-bg); color: var(--far-ink); }
+  .fest-item .price { grid-column: 1 / -1; font-size: .85rem; }
+  tfoot .price-cell { font-size: .8rem; text-align: left; min-width: 9rem; }
 td.self { color: var(--muted); }
 tfoot td, tfoot th { font-weight: 700; border-bottom: 0; }
 .warn { margin: .5rem clamp(1rem, 3vw, 2rem) 0; padding: .6rem .9rem; border-radius: var(--radius-sm); background: var(--hi); color: var(--ink); font-size: .92rem; }
@@ -840,9 +852,28 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const withPlz = (r) => `${esc(r.name)}<span class="plz">${esc([r.plz, r.ort].filter(Boolean).join(" "))}</span>`;
 const safeUrl = (u) => /^https?:\/\//i.test(u) ? u : "";
+const linkify = (s) => esc(s).replace(/(https?:\/\/[^\s]+)/g, (m) => '<a href="' + m + '" target="_blank" rel="noopener">' + m + '</a>');
+// Values may carry a year tag per segment: "2026: 229 € | 2027: 249 €".
+  // The edition year is the last 4-digit year in the Datum column.
+  const editionYear = (f) => { const m = String(f.datum || "").match(/\d{4}/g); return m ? +m[m.length - 1] : null; };
+  const parseTagged = (s) => String(s || "").split(/\s*\|\s*|\n+/).map((x) => x.trim()).filter(Boolean).map((x) => {
+    const m = x.match(/^\(?(\d{4})\)?\s*[:\-–]\s*(.+)$/s);
+    return m ? { year: +m[1], text: m[2].trim() } : { year: null, text: x };
+  });
+  const badge = (y, ed) => {
+    if (y === null) return '<span class="yr unk" title="Kein Jahr angegeben">Stand offen</span>';
+    if (ed === null || y >= ed) return `<span class="yr cur" title="Gilt für die kommende Ausgabe">${y}</span>`;
+    return `<span class="yr old" title="Aus einer früheren Ausgabe übernommen">${y} · Vorjahr</span>`;
+  };
+  const taggedHtml = (s, f) => { const ed = editionYear(f); return parseTagged(s).map((g) => `<span class="seg">${badge(g.year, ed)}${linkify(g.text)}</span>`).join(""); };
+  const detailsHtml = (f) => {
+  const items = (f.preis ? [{ label: "Ticket", value: f.preis }] : []).concat(f.extra || []);
+    const rows = items.map((e) => "<dt>" + esc(e.label) + "</dt><dd>" + taggedHtml(e.value, f) + "</dd>").join("");
+  return rows ? '<div class="details"><dl>' + rows + '</dl></div>' : "";
+};
 const lineupHtml = (f) => {
   const parts = [];
-  if (f.lineup) parts.push(esc(f.lineup));
+  if (f.lineup) parts.push(taggedHtml(f.lineup, f));
   const u = safeUrl(f.link || "");
   if (u) parts.push(`<a href="${esc(u)}" target="_blank" rel="noopener">Website</a>`);
   return parts.length ? `<p class="lineup">${parts.join(" – ")}</p>` : "";
@@ -894,12 +925,16 @@ function tableFromResp(resp, tab) {
   }
   const cols = resp.table.cols.map((c, i) => (c.label || "").trim().toLowerCase() || `#${i}`);
   const idx = (names, fallback) => { const i = cols.findIndex((c) => names.some((n) => c.startsWith(n))); return i >= 0 ? i : fallback; };
-  const iName = idx(["name"], 0), iPlz = idx(["plz", "postleitzahl"], 1), iOrt = idx(["ort", "stadt", "wohnort"], 2), iDat = idx(["datum", "termin", "wann"], -1), iLine = idx(["headliner", "bands", "line"], -1), iLink = idx(["link", "web", "url"], -1);
+  const iName = idx(["name"], 0), iPlz = idx(["plz", "postleitzahl"], 1), iOrt = idx(["ort", "stadt", "wohnort"], 2), iDat = idx(["datum", "termin", "wann"], -1), iLine = idx(["headliner", "bands", "line"], -1), iLink = idx(["link", "web", "url"], -1), iPreis = idx(["preis", "ticket"], -1);
+  const known = new Set([iName, iPlz, iOrt, iDat, iLine, iLink, iPreis].filter((i) => i >= 0));
+  const label = (i) => (resp.table.cols[i] && (resp.table.cols[i].label || "").trim()) || ("Spalte " + (i + 1));
   return resp.table.rows.map((r) => {
     const c = r.c || [];
     const cell = (i) => (i >= 0 && c[i]) ? c[i] : null;
     const val = (i) => { const x = cell(i); return x ? (x.f ?? x.v ?? "") : ""; };
-    return { name: String(val(iName)).trim(), plz: normPlz(cell(iPlz) && cell(iPlz).v), ort: String(val(iOrt)).trim(), datum: String(val(iDat)).trim(), lineup: String(val(iLine)).trim(), link: String(val(iLink)).trim() };
+    const extra = [];
+    for (let i = 0; i < resp.table.cols.length; i++) { if (known.has(i)) continue; const v = String(val(i)).trim(); if (v) extra.push({ label: label(i), value: v }); }
+    return { name: String(val(iName)).trim(), plz: normPlz(cell(iPlz) && cell(iPlz).v), ort: String(val(iOrt)).trim(), datum: String(val(iDat)).trim(), lineup: String(val(iLine)).trim(), link: String(val(iLink)).trim(), preis: String(val(iPreis)).trim(), extra };
   }).filter((r) => r.name || r.plz);
 }
 
@@ -910,7 +945,7 @@ const DEMO = {
     { name: "Eva", plz: "06667", ort: "Weißenfels" },
   ],
   festivals: [
-    { name: "Beispiel-Festival Nord", plz: "24103", ort: "Kiel", datum: "Juni", lineup: "Band A, Band B", link: "https://example.org" },
+    { name: "Beispiel-Festival Nord", plz: "24103", ort: "Kiel", datum: "18.06. - 20.06.2027", lineup: "2027: Band A, Band B", link: "https://example.org", preis: "2026: 229 € | 2027: 249 €", extra: [{ label: "Camping", value: "2026: Wiese direkt am Gelände" }, { label: "Auto am Zelt", value: "2027: nein, nur mit Caravan-Ticket" }, { label: "Einlass", value: "Do ab 7 Uhr" }, { label: "Mehr Infos", value: "https://example.org/camping" }] },
     { name: "Beispiel-Festival Mitte", plz: "99084", ort: "Erfurt", datum: "Juli" },
     { name: "Beispiel-Festival Süd", plz: "90402", ort: "Nürnberg", datum: "August" },
   ],
@@ -960,7 +995,7 @@ function renderFestList() {
   box.innerHTML = festivals.map((f, i) => `
     <button class="fest-item" type="button" data-i="${i}" aria-pressed="${selected === i}">
       <strong>${esc(f.name)}</strong><span class="avg">${people.length ? "Ø " + fmtKm(avgTo(f)) : ""}</span>
-      <small>${esc([f.plz, f.ort].filter(Boolean).join(" "))}${f.datum ? " – " + esc(f.datum) : ""}</small>${f.lineup ? `<span class="lineup">${esc(f.lineup)}</span>` : ""}
+      <small>${esc([f.plz, f.ort].filter(Boolean).join(" "))}${f.datum ? " – " + esc(f.datum) : ""}</small>${f.preis ? `<span class="price">Ticket: ${taggedHtml(f.preis, f)}</span>` : ""}
     </button>`).join("");
   box.querySelectorAll(".fest-item").forEach((b) => b.addEventListener("click", () => select(+b.dataset.i)));
 }
@@ -971,7 +1006,7 @@ function renderRanking() {
   const f = festivals[selected];
   if (!people.length) { box.innerHTML = `<h3>${esc(f.name)}</h3><p class="empty">Noch keine Personen eingetragen.</p>`; return; }
   const rows = people.map((p) => ({ p, d: haversine(p.ll, f.ll) })).sort((a, b) => a.d - b.d);
-  box.innerHTML = `<h3>Entfernung nach ${esc(f.ort || f.name)}</h3>${lineupHtml(f)}<ol>${rows.map((r, k) => `<li class="${rows.length > 1 && k === 0 ? "near" : rows.length > 1 && k === rows.length - 1 ? "far" : ""}"><span>${esc(r.p.name)}</span><span>${fmtKm(r.d)}</span></li>`).join("")}</ol>
+  box.innerHTML = `<h3>Entfernung nach ${esc(f.ort || f.name)}</h3>${lineupHtml(f)}${detailsHtml(f)}<ol>${rows.map((r, k) => `<li class="${rows.length > 1 && k === 0 ? "near" : rows.length > 1 && k === rows.length - 1 ? "far" : ""}"><span>${esc(r.p.name)}</span><span>${fmtKm(r.d)}</span></li>`).join("")}</ol>
     <p class="hint">Durchschnitt ${fmtKm(avgTo(f))}, weitester Weg ${fmtKm(rows[rows.length - 1].d)}.</p>`;
 }
 
@@ -985,7 +1020,7 @@ function renderTable() {
     wrap.innerHTML = `<table><thead><tr><th>Person</th>${festivals.map((f) => `<th>${withPlz(f)}</th>`).join("")}</tr></thead>
       <tbody>${people.map((p, i) => `<tr><th>${withPlz(p)}</th>${d[i].map((v, j) => `<td class="${people.length > 1 && v === minPerFest[j] ? "near" : people.length > 1 && v === maxPerFest[j] ? "far" : ""}">${fmtKm(v)}</td>`).join("")}</tr>`).join("")}</tbody>
       <tfoot><tr><th>Durchschnitt</th>${festivals.map((f) => `<td>${fmtKm(avgTo(f))}</td>`).join("")}</tr>
-      <tr><th>Weitester Weg</th>${festivals.map((_, j) => `<td>${fmtKm(Math.max(...d.map((r) => r[j])))}</td>`).join("")}</tr></tfoot></table>`;
+      <tr><th>Weitester Weg</th>${festivals.map((_, j) => `<td>${fmtKm(Math.max(...d.map((r) => r[j])))}</td>`).join("")}</tr>${festivals.some((f) => f.preis) ? `<tr><th>Ticket</th>${festivals.map((f) => `<td class="price-cell">${f.preis ? taggedHtml(f.preis, f) : "–"}</td>`).join("")}</tr>` : ""}</tfoot></table>`;
   } else {
     if (people.length < 2) { wrap.innerHTML = `<p class="hint" style="padding:1rem">Ab zwei eingetragenen Personen erscheint hier die Übersicht.</p>`; return; }
     wrap.innerHTML = `<table><thead><tr><th>Person</th>${people.map((p) => `<th>${withPlz(p)}</th>`).join("")}</tr></thead>
