@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apps Script JSONP test</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; }
+  input { width: 100%; padding: .5rem; font: inherit; box-sizing: border-box; }
+  button { margin-top: .5rem; padding: .5rem 1rem; font: inherit; }
+  pre { background: #f2f2f2; padding: 1rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ok { color: #1b6b34; font-weight: 700; } .bad { color: #a3261b; font-weight: 700; }
+</style>
+</head>
+<body>
+<h1>Apps-Script-Test</h1>
+<p>Web-App-URL (endet auf <code>/exec</code>) einfügen und testen. Die URL wird nirgends gespeichert.</p>
+<input id="url" placeholder="https://script.google.com/macros/s/…/exec">
+<button id="go" type="button">Testen</button>
+<p id="status"></p>
+<pre id="out"></pre>
+<script>
+// Loads the Apps Script web app via JSONP (script tag), the same way the map page will.
+const $ = (id) => document.getElementById(id);
+const u = new URLSearchParams(location.search).get("url");
+if (u) $("url").value = u;
+$("go").addEventListener("click", () => {
+  const base = $("url").value.trim();
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(base)) {
+    $("status").innerHTML = '<span class="bad">URL hat nicht das Format https://script.google.com/macros/s/…/exec</span>'; return;
+  }
+  $("status").textContent = "Lade …"; $("out").textContent = "";
+  const cb = "__gasTest" + Date.now();
+  const timer = setTimeout(() => { $("status").innerHTML = '<span class="bad">Keine Antwort nach 15 s.</span>'; }, 15000);
+  window[cb] = (data) => {
+    clearTimeout(timer);
+    $("status").innerHTML = data && data.ok ? '<span class="ok">Funktioniert.</span>' : '<span class="bad">Antwort kam, aber ohne ok.</span>';
+    $("out").textContent = JSON.stringify(data, null, 2);
+    delete window[cb];
+  };
+  const s = document.createElement("script");
+  s.src = base + "?callback=" + cb + "&t=" + Date.now();
+  s.onerror = () => { clearTimeout(timer); $("status").innerHTML = '<span class="bad">Laden fehlgeschlagen (Script-Fehler). Zugriff „Jeder" gesetzt?</span>'; };
+  document.body.appendChild(s);
+});
+</script>
+</body>
+</html>
