@@ -756,6 +756,7 @@ th, td { padding: .5rem .75rem; border-bottom: 1px solid var(--line); text-align
 th:first-child, td:first-child { text-align: left; position: sticky; left: 0; background: var(--panel); }
 thead th { font-weight: 600; font-size: .9rem; vertical-align: bottom; }
 tbody th { font-weight: 600; }
+th .plz { display: block; font-weight: 400; font-size: .8rem; color: var(--muted); }
 td.best { background: var(--hi); font-weight: 700; }
 td.self { color: var(--muted); }
 tfoot td, tfoot th { font-weight: 700; border-bottom: 0; }
@@ -827,6 +828,7 @@ const demo = params.has("demo");
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const withPlz = (r) => `${esc(r.name)}<span class="plz">${esc(r.plz)}</span>`;
 const fmtKm = (km) => `${Math.round(km).toLocaleString("de-DE")} km`;
 
 function haversine(a, b) {
@@ -961,14 +963,14 @@ function renderTable() {
     if (!people.length || !festivals.length) { wrap.innerHTML = `<p class="hint" style="padding:1rem">Sobald Personen und Festivals eingetragen sind, erscheint hier die Übersicht.</p>`; return; }
     const d = people.map((p) => festivals.map((f) => haversine(p.ll, f.ll)));
     const minPerFest = festivals.map((_, j) => Math.min(...d.map((r) => r[j])));
-    wrap.innerHTML = `<table><thead><tr><th>Person</th>${festivals.map((f) => `<th>${esc(f.name)}</th>`).join("")}</tr></thead>
-      <tbody>${people.map((p, i) => `<tr><th>${esc(p.name)}</th>${d[i].map((v, j) => `<td class="${v === minPerFest[j] ? "best" : ""}">${fmtKm(v)}</td>`).join("")}</tr>`).join("")}</tbody>
+    wrap.innerHTML = `<table><thead><tr><th>Person</th>${festivals.map((f) => `<th>${withPlz(f)}</th>`).join("")}</tr></thead>
+      <tbody>${people.map((p, i) => `<tr><th>${withPlz(p)}</th>${d[i].map((v, j) => `<td class="${v === minPerFest[j] ? "best" : ""}">${fmtKm(v)}</td>`).join("")}</tr>`).join("")}</tbody>
       <tfoot><tr><th>Durchschnitt</th>${festivals.map((f) => `<td>${fmtKm(avgTo(f))}</td>`).join("")}</tr>
       <tr><th>Weitester Weg</th>${festivals.map((_, j) => `<td>${fmtKm(Math.max(...d.map((r) => r[j])))}</td>`).join("")}</tr></tfoot></table>`;
   } else {
     if (people.length < 2) { wrap.innerHTML = `<p class="hint" style="padding:1rem">Ab zwei eingetragenen Personen erscheint hier die Übersicht.</p>`; return; }
-    wrap.innerHTML = `<table><thead><tr><th>Person</th>${people.map((p) => `<th>${esc(p.name)}</th>`).join("")}</tr></thead>
-      <tbody>${people.map((a, i) => `<tr><th>${esc(a.name)}</th>${people.map((b, j) => i === j ? `<td class="self">–</td>` : `<td>${fmtKm(haversine(a.ll, b.ll))}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+    wrap.innerHTML = `<table><thead><tr><th>Person</th>${people.map((p) => `<th>${withPlz(p)}</th>`).join("")}</tr></thead>
+      <tbody>${people.map((a, i) => `<tr><th>${withPlz(a)}</th>${people.map((b, j) => i === j ? `<td class="self">–</td>` : `<td>${fmtKm(haversine(a.ll, b.ll))}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
   }
 }
 
