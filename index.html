@@ -828,7 +828,7 @@ const demo = params.has("demo");
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const withPlz = (r) => `${esc(r.name)}<span class="plz">${esc(r.plz)}</span>`;
+const withPlz = (r) => `${esc(r.name)}<span class="plz">${esc([r.plz, r.ort].filter(Boolean).join(" "))}</span>`;
 const fmtKm = (km) => `${Math.round(km).toLocaleString("de-DE")} km`;
 
 function haversine(a, b) {
